@@ -3,7 +3,7 @@
 	import { startNew, startCustom } from '@sudoku/game';
 	import { validateSencode } from '@sudoku/sencode';
 	import { DIFFICULTIES } from '@sudoku/constants';
-
+	import { gameStore } from '../../../domain/store.js';
 	export let data = {};
 	export let hideModal;
 
@@ -15,9 +15,9 @@
 
 	function handleStart() {
 		if (validateSencode(sencode)) {
-			startCustom(sencode);
+			gameStore.startCustom(sencode);
 		} else {
-			startNew(difficulty);
+			gameStore.startNew(difficulty);
 		}
 
 		hideModal();

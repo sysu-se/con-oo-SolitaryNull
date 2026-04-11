@@ -1,7 +1,7 @@
 <script>
 	import { BOX_SIZE } from '@sudoku/constants';
 	import { gamePaused } from '@sudoku/stores/game';
-	import { grid, userGrid, invalidCells } from '@sudoku/stores/grid';
+	import { gameStore } from '../../domain/store.js';
 	import { settings } from '@sudoku/stores/settings';
 	import { cursor } from '@sudoku/stores/cursor';
 	import { candidates } from '@sudoku/stores/candidates';
@@ -30,30 +30,31 @@
 </script>
 
 <div class="board-padding relative z-10">
-	<div class="max-w-xl relative">
+	<!-- 这个 div 通过 padding-top: 100% 撑开一个正方形区域 -->
+	<div class="max-w-xl mx-auto relative">
 		<div class="w-full" style="padding-top: 100%"></div>
-	</div>
-	<div class="board-padding absolute inset-0 flex justify-center">
-
-		<div class="bg-white shadow-2xl rounded-xl overflow-hidden w-full h-full max-w-xl grid" class:bg-gray-200={$gamePaused}>
-
-			{#each $userGrid as row, y}
-				{#each row as value, x}
-					<Cell {value}
-					      cellY={y + 1}
-					      cellX={x + 1}
-					      candidates={$candidates[x + ',' + y]}
-					      disabled={$gamePaused}
-					      selected={isSelected($cursor, x, y)}
-					      userNumber={$grid[y][x] === 0}
-					      sameArea={$settings.highlightCells && !isSelected($cursor, x, y) && isSameArea($cursor, x, y)}
-					      sameNumber={$settings.highlightSame && value && !isSelected($cursor, x, y) && getValueAtCursor($userGrid, $cursor) === value}
-					      conflictingNumber={$settings.highlightConflicting && $grid[y][x] === 0 && $invalidCells.includes(x + ',' + y)} />
-				{/each}
-			{/each}
-
-		</div>
-
+        
+        <!-- 下面这个是真正的网格承载层，必须 absolute 且 inset-0 撑满上面的正方形 -->
+        <div class="absolute inset-0 flex justify-center">
+            <div 
+                class="bg-white shadow-2xl rounded-xl overflow-hidden w-full h-full max-w-xl grid" 
+                style="display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); height: 100%; width: 100%;"
+                class:bg-gray-200={$gamePaused}
+            >
+                {#each $gameStore.grid as row, y}
+                    {#each row as value, x}
+                        <Cell 
+                            {value}
+                            cellY={y + 1}
+                            cellX={x + 1}
+                            selected={$cursor.x === x && $cursor.y === y}
+							conflictingNumber={$settings.highlightConflicting && $gameStore.invalidCells.includes(x + ',' + y)}
+							userNumber={$gameStore.initialGrid[y][x] === 0 && value !== 0}
+                        />
+                    {/each}
+                {/each}
+            </div>
+        </div>
 	</div>
 </div>
 

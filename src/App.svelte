@@ -3,16 +3,15 @@
 	import { validateSencode } from '@sudoku/sencode';
 	import game from '@sudoku/game';
 	import { modal } from '@sudoku/stores/modal';
-	import { gameWon } from '@sudoku/stores/game';
 	import Board from './components/Board/index.svelte';
 	import Controls from './components/Controls/index.svelte';
 	import Header from './components/Header/index.svelte';
 	import Modal from './components/Modal/index.svelte';
-
-	gameWon.subscribe(won => {
-		if (won) {
-			game.pause();
-			modal.show('gameover');
+	import { gameStore } from './domain/store.js';
+	gameStore.subscribe(state => {
+		if (state.isComplete) {
+			game.pause(); // 停止计时器
+			modal.show('gameover'); // 弹出结束框
 		}
 	});
 

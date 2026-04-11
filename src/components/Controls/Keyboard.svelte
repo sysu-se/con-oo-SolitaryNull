@@ -1,5 +1,5 @@
 <script>
-	import { userGrid } from '@sudoku/stores/grid';
+	import { gameStore } from '../../domain/store.js';
 	import { cursor } from '@sudoku/stores/cursor';
 	import { notes } from '@sudoku/stores/notes';
 	import { candidates } from '@sudoku/stores/candidates';
@@ -10,18 +10,18 @@
 	function handleKeyButton(num) {
 		if (!$keyboardDisabled) {
 			if ($notes) {
-				if (num === 0) {
-					candidates.clear($cursor);
-				} else {
-					candidates.add($cursor, num);
-				}
-				userGrid.set($cursor, 0);
+				// 笔记（Notes）逻辑目前仍可留在 UI 层或辅助 store
+				if (num === 0) candidates.clear($cursor);
+				else candidates.add($cursor, num);
 			} else {
-				if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
-					candidates.clear($cursor);
-				}
-
-				userGrid.set($cursor, num);
+				// 核心：调用领域层的落子方法
+                // 注意：gameStore.guess 会处理非法落子校验
+				gameStore.guess($cursor.y, $cursor.x, num);
+                
+                // 清理笔记
+                if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
+                    candidates.clear($cursor);
+                }
 			}
 		}
 	}
