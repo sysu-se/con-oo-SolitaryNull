@@ -7,6 +7,22 @@
 
 ## 一、 领域对象改进说明
 
+### 相比 HW1 的改进
+
+| 改进项 | Homework 1 (之前) | Homework 1.1 (现在) |
+| :--- | :--- | :--- |
+| **接入程度** | 领域对象仅存在于测试中，UI 依然操作旧 Store | 领域对象是核心，所有 UI 事件均调用领域方法 |
+| **新旧兼容** | 计时器、难度显示与棋盘状态脱节 | `gameStore` 统一调度，开始新游戏时自动重置计时器和难度 |
+| **代码风格** | 领域层代码风格不统一，注释不规范 | 职责清晰，采用标准的JSDoc注释风格 |
+| **逻辑严谨性** | 缺乏合法性校验 | 修正了非法落子（修改初始格）、完成判定错误、序列化引用暴露等缺陷 |
+
+#### 为什么 HW1 的做法不足以支撑真实接入？
+
+*   **缺乏通信桥梁**：HW1 的领域对象是孤立的类，Svelte 无法得知类内部数据的变化。
+*   **职责重叠**：HW1 的 UI 组件仍然持有大量的逻辑片段（如操作旧数组），导致领域对象沦为装饰。
+
+### 针对评审的核心对象改进
+
 针对 Homework 1 的评审意见，我们对领域模型进行了实质性的安全性与严谨性改进：
 
 1.  **阻止非法落子 (Core)**：
@@ -23,14 +39,6 @@
 6.  **增加结构性校验 (Minor)**：
     *   构造函数中加入 `_validateStructure`，强制要求输入必须为 9x9 矩阵，否则抛出异常。
 
-
-### 其他改进说明
-
-| 改进项 | Homework 1 (之前) | Homework 1.1 (现在) |
-| :--- | :--- | :--- |
-| **接入程度** | 领域对象仅存在于测试中，UI 依然操作旧 Store | 领域对象是核心，所有 UI 事件均调用领域方法 |
-| **新旧兼容** | 计时器、难度显示与棋盘状态脱节 | `gameStore` 统一调度，开始新游戏时自动重置计时器和难度 |
-| **代码风格** | 领域层代码风格不统一，注释不规范 | 职责清晰，采用标准的JSDoc注释风格 |
 
 ### 设计 Trade-offs
 
@@ -145,7 +153,6 @@ graph TD
 *   **动作**：调用 `gameStore.undo()` 或 `redo()`。
 *   **过程**：`Game` 内部移动 `historyIndex` 指针并重放 `moves` -> 调用 `sync()` 更新视图。
 
-
 ---
 
 ## 三、 核心对象说明
@@ -171,43 +178,26 @@ graph TD
 
 ---
 
-## 四、 响应式机制解析（核心答辩点）
+## 四、 响应式机制解析
 
-### 4.1 为什么 UI 会自动更新？
-UI 会更新是因为我们利用了 Svelte 的 **Store 订阅机制**。
-1. `gameStore` 本质上是一个 `writable`。
-2. 当我们调用 `gameStore.guess()` 时，内部执行了 `gameInstance.guess()`。
-3. 随后立即执行了 `sync()`，在 `sync` 中我们调用了 `set({ ...newSnapshot })`。
-4. Svelte 检测到 `gameStore` 的对象引用发生了变化，便会通知所有订阅了 `$gameStore` 的组件（如 `Board`）进行重绘。
+### 1. 依赖机制
+本方案主要依赖 Svelte 的 **`writable` store** 机制和 **`$` 自动订阅语法**。
+*   我们没有使用复杂的 `$:` 派生（除了 UI 内部的微调），而是选择在适配器层手动控制 `set` 的时机，这被称为**状态投影**。
+  
+### 2. 响应式暴露 vs 内部留存
+*   **响应式暴露的数据**：`grid`, `initialGrid`, `invalidCells`, `isComplete`, `canUndo/canRedo`。这些是 UI 渲染所必需的。
+*   **留在领域对象内部的状态**：
+    *   **`moves` 历史栈**：UI 不需要知道历史记录的细节，只需要知道“能不能退”。
+    *   **`historyIndex` 指针**：管理回溯进度的内部游标。
+    *   **`currentSudoku` 实例**：复杂的领域逻辑聚合。
 
-
-### 4.2 为什么领域对象变了，界面有时不刷新？
-如果在 `Game` 对象内部直接修改 `this.currentSudoku.grid[0][0] = 5`，Svelte 是**无法感知**的。因为 Svelte 的响应式是建立在变量赋值或 Store 的 `set/update` 调用之上的。**本项目通过适配器层的 `sync` 函数显式触发 `set`，完美避开了这个问题。**
-
-### 4.3 "间接依赖" 问题如何解决？
-原系统中，计时器和胜利判定依赖于多个分散的 Store。在重构后，我们将这些“间接依赖”统一收拢。
-- **胜利判定**：`App.svelte` 直接订阅 `$gameStore.isComplete`。
-- **冲突高亮**：`Cell` 接收来自 `$gameStore.invalidCells` 的投影，实现了数据的一致
-
-### 4.4 响应式边界
+### 3. 响应式边界
 
 **边界位于 `gameStore.js` 的 `sync()` 函数。**
 *   **边界内 (领域层)**：是纯 JavaScript 环境，状态变更通过方法调用（Mutation）完成，不具备响应式。
 *   **边界外 (UI 层)**：是 Svelte 环境，通过订阅 `gameStore` 产生的快照实现声明式更新。
-*   
----
 
-## 五、 核心问题解答
-
-### 5.1 视图层消费与状态可见性
-
-1.  **View 层直接消费的是谁？**
-    *   View 层直接消费的是 `gameStore`（适配器）。它不直接操作 `Game` 或 `Sudoku` 类，而是通过 `$gameStore` 语法糖订阅投影出的状态。
-2.  **哪些状态对 UI 可见，哪些不可见？**
-    *   **可见状态**：`grid`（当前棋盘）、`initialGrid`（题面）、`canUndo/canRedo`（按钮状态）、`isComplete`（胜负状态）、`invalidCells`（冲突坐标）。
-    *   **不可见状态**：`moves` 历史栈、`historyIndex` 指针、`currentSudoku` 实例内部结构。这些被封装在 `Game` 类内部。
-
-### 5.2 Svelte 响应式深入理解
+### 4. Svelte 响应式深入理解
 
 1.  **为什么修改对象内部字段后，界面不一定自动更新？**
     *   因为 Svelte 3/4 的反应性是基于“赋值”的。直接修改对象的属性（如 `obj.a = 1`）不会改变对象本身的引用，如果不重新执行 `obj = obj` 或调用 Store 的 `set`，Svelte 无法追踪到深层的变化。
@@ -220,24 +210,73 @@ UI 会更新是因为我们利用了 Svelte 的 **Store 订阅机制**。
 5.  **为什么“间接依赖”可能导致不触发？**
     *   如果 `$:` 依赖的变量 `A` 是通过非响应式途径获取的（比如在一个普通函数里缓存了快照），那么当源数据变化时，`A` 不会变，导致 `$: B = A + 1` 也不触发。
 
-### 5.3 迁移与演进
-
-1.  **如果将来迁移到 Svelte 5，哪一层最稳定，哪一层最可能改动？**
-    *   **最稳定**：**Domain Layer (领域层)**。它是纯粹的 JS 类，不依赖任何框架。
-    *   **最可能改动**：**Store Adapter (适配器层)**。Svelte 5 引入了 `Runes` ($state, $derived)，适配器层可以将现在的 `writable` 替换为更为简洁的响应式类（Reactive Classes），从而去掉显式的 `sync()` 调用。
-
-### 5.4 错误Mutate示范
+### 5. 错误Mutate后果
 
 如果错误地在 Svelte 组件中直接 **Mutate（突变）** 领域对象内部字段（例如 `game.currentSudoku.grid[0][0] = 5`）：
 1.  **视图不更新**：Svelte 无法检测到这种深层修改，棋盘会维持旧数字。
 2.  **状态不一致**：Undo/Redo 历史栈可能不会被同步更新，导致撤销功能失效。
 3.  **违反封装性**：UI 层介入了业务规则的实现细节，违反了单一职责原则，使得逻辑难以在测试中复用。
 
-通过 `gameStore` 这一层适配，我们确保了领域对象是 **“Single Source of Truth”（单一事实来源）**，同时也完美契合了 Svelte 的响应式工作流
+通过 `gameStore` 这一层适配，我们确保了领域对象是 **“Single Source of Truth”（单一事实来源）**，同时也完美契合了 Svelte 的响应式工作流。
 
 ---
 
+## 五、核心问题解答
 
+### 1. 视图层消费与状态可见性
+
+1.  **View 层直接消费的是谁？**
+    *   View 层直接消费的是 `gameStore`（适配器）。它不直接操作 `Game` 或 `Sudoku` 类，而是通过 `$gameStore` 语法糖订阅投影出的状态，并调用 `gameStore` 暴露的命令方法（如 `guess`, `undo`, `redo`）。
+
+2.  **哪些状态对 UI 可见，哪些不可见？**
+    *   **可见状态**：`grid`（当前棋盘）、`initialGrid`（题面）、`canUndo/canRedo`（按钮状态）、`isComplete`（胜负状态）、`invalidCells`（冲突坐标）。
+    *   **不可见状态**：`moves` 历史栈、`historyIndex` 指针、`currentSudoku` 实例内部结构。这些被封装在 `Game` 类内部。
+
+3. **View 层拿到的数据是什么？**
+通过 `gameStore` 的响应式快照，UI 能够获取以下投影数据：
+*   **`grid`**：当前棋盘的 9x9 二维数组（用于渲染数字）。
+*   **`initialGrid`**：初始题面的副本（用于区分哪些格子是蓝色的、哪些是锁定的）。
+*   **`invalidCells`**：当前冲突格子的坐标数组（如 `["0,1", "5,2"]`，用于标红）。
+*   **`isComplete`**：游戏胜负状态（用于弹出胜利窗口）。
+*   **`canUndo / canRedo`**：布尔值（用于禁用或启用撤销重做按钮）。
+  
+4. **用户操作如何进入领域对象？**
+*   **点击落子**：`Keyboard.svelte` 捕获点击，调用 `gameStore.guess(row, col, value)`。该方法内部调用 `Game.guess`，执行规则校验并存入历史栈。
+*   **历史导航**：`Actions.svelte` 点击按钮，调用 `gameStore.undo()` 或 `redo()`，进入 `Game` 内部的历史指针移动逻辑。
+*   **初始化**：`Welcome.svelte` 或 `Dropdown.svelte` 调用 `gameStore.startNew(difficulty)`，在适配器内部销毁旧实例并创建新的 `Game` 与 `Sudoku` 聚合。
+
+5. **领域对象变化后，Svelte 为什么会更新？**
+这依赖于**显式同步（Explicit Sync）**机制：
+- 领域对象发生内部状态改变（例如 `moves` 增加）。
+- 适配器立即执行内部函数 `sync()`。
+- `sync()` 调用 Svelte Store 的 `set()` 方法发送一个新的对象快照。
+- Svelte 的 store 系统通知所有订阅者（Subscriber），触发 UI 重新渲染。
+
+### 2. 为什么 UI 会自动更新？
+UI 会更新是因为我们利用了 Svelte 的 **Store 订阅机制**。
+1. `gameStore` 本质上是一个 `writable`。
+2. 当我们调用 `gameStore.guess()` 时，内部执行了 `gameInstance.guess()`。
+3. 随后立即执行了 `sync()`，在 `sync` 中我们调用了 `set({ ...newSnapshot })`。
+4. Svelte 检测到 `gameStore` 的对象引用发生了变化，便会通知所有订阅了 `$gameStore` 的组件（如 `Board`）进行重绘。
+
+
+### 3. 为什么领域对象变了，界面有时不刷新？
+如果在 `Game` 对象内部直接修改 `this.currentSudoku.grid[0][0] = 5`，Svelte 是**无法感知**的。因为 Svelte 的响应式是建立在变量赋值或 Store 的 `set/update` 调用之上的。**本项目通过适配器层的 `sync` 函数显式触发 `set`，完美避开了这个问题。**
+
+### 4. "间接依赖" 问题如何解决？
+原系统中，计时器和胜利判定依赖于多个分散的 Store。在重构后，我们将这些“间接依赖”统一收拢。
+- **胜利判定**：`App.svelte` 直接订阅 `$gameStore.isComplete`。
+- **冲突高亮**：`Cell` 接收来自 `$gameStore.invalidCells` 的投影，实现了数据的一致性和单一事实来源（Single Source of Truth）。
+
+
+
+### 5. 迁移与演进
+
+1.  **如果将来迁移到 Svelte 5，哪一层最稳定，哪一层最可能改动？**
+    *   **最稳定**：**Domain Layer (领域层)**。它是纯粹的 JS 类，不依赖任何框架。
+    *   **最可能改动**：**Store Adapter (适配器层)**。Svelte 5 引入了 `Runes` ($state, $derived)，适配器层可以将现在的 `writable` 替换为更为简洁的响应式类（Reactive Classes），从而去掉显式的 `sync()` 调用。
+
+---
 
 ## 六、 关键改动列表
 
