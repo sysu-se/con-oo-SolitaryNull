@@ -1,5 +1,5 @@
 <script>
-	import game from '@sudoku/game';
+	import { gameStore } from '../../domain/store.js';//修改
 	import { validateSencode } from '@sudoku/sencode';
 	import { modal } from '@sudoku/stores/modal';
 	import { slide, fade } from 'svelte/transition';
@@ -10,22 +10,22 @@
 
 	function handleDifficulty(difficultyValue) {
 		dropdownVisible = false;
-		game.pause();
-
+		//game.pause();
+		gameStore.pause();
 		modal.show('confirm', {
 			title: 'New Game',
 			text: 'Start new game with difficulty "' + DIFFICULTIES[difficultyValue] + '"?',
-			button: 'Continue',
-			onHide: game.resume,
+			onHide: gameStore.resume,
 			callback: () => {
-				game.startNew(difficultyValue);
+				gameStore.startNew(difficultyValue);
+
 			},
 		});
 	}
 
 	function handleCreateOwn() {
 		dropdownVisible = false;
-		game.pause();
+		gameStore.pause();
 
 		modal.show('confirm', {
 			title: 'Create Own',
@@ -40,16 +40,16 @@
 
 	function handleEnterCode() {
 		dropdownVisible = false;
-		game.pause();
+		gameStore.pause();
 
 		modal.show('prompt', {
 			title: 'Enter Code',
 			text: 'Please enter the code of the Sudoku puzzle you want to play:',
 			fontMono: true,
 			button: 'Start',
-			onHide: game.resume,
+			onHide: gameStore.resume,
 			callback: (value) => {
-				game.startCustom(value);
+				gameStore.startCustom(value);
 			},
 			validate: validateSencode
 		});
@@ -57,12 +57,12 @@
 
 	function showDropdown() {
 		dropdownVisible = true;
-		game.pause();
+		gameStore.pause();
 	}
 
 	function hideDropdown() {
 		dropdownVisible = false;
-		setTimeout(game.resume, DROPDOWN_DURATION);
+		setTimeout(gameStore.resume, DROPDOWN_DURATION);
 	}
 </script>
 
